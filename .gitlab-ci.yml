@@ -69,6 +69,7 @@ stages:
 build-image-debian:
   <<: *kanikobuild
   stage: build
+  timeout: 30m
   image:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: [""]
@@ -79,6 +80,7 @@ build-image-debian:
 build-image-alpine:
   <<: *kanikobuild
   stage: build
+  timeout: 30m
   image:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: [""]
@@ -195,6 +197,7 @@ release-with-tag:
 pages-test:
   image: python:3.8.1
   stage: test
+  timeout: 10m
   script:
     - cd docs
     - pip install -r requirements.txt
@@ -207,6 +210,7 @@ pages-test:
 pages:
   image: python:3.8.1
   stage: release
+  timeout: 10m
   script:
     - cd docs
     - pip install -r requirements.txt
