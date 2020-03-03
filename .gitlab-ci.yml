@@ -42,12 +42,13 @@ variables:
 
 .kaniko_build: &kanikobuild
   before_script:
-    - mkdir -p $HOME/.docker /kaniko/.docker
+    - mkdir -p /kaniko/.docker
     - echo "{\"auths\":{\"${DOCKER_REGISTRY:-https://index.docker.io/v1/}\":{\"auth\":\"${DOCKER_AUTH}\",\"${CI_REGISTRY}\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
 
 
 .docker: &dockerlogin
   before_script:
+    - mkdir -p $HOME/.docker
     - echo "{\"auths\":{\"${DOCKER_REGISTRY:-https://index.docker.io/v1/}\":{\"auth\":\"${DOCKER_AUTH}\",\"${CI_REGISTRY}\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > $HOME/.docker/config.json
     - docker login $CI_REGISTRY || true
     - docker login ${DOCKER_REGISTRY:-https://index.docker.io/v1/} || true
