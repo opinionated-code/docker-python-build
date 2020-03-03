@@ -1,0 +1,199 @@
+# ##################################################################################### #
+#
+# Build and test docker images for python-build, a multi-version python build image
+#
+# This image is intended to be used for development and build, *not* as a "FROM" image
+# to extend and build a production image on top of. In other words, the only way this
+# should be used to build a production app, is if it is used to create a virtualenv or
+# a python wheel that will then be installed into a separate clean image.
+#
+# ##################################################################################### #
+#
+# This image leverages several variables set by Gitlab, and some variables set in CI/CD
+# settings.
+#
+# DOCKER_REGISTRY           - registry server name (i.e. docker.io)
+# DOCKER_AUTH               - base64 encoded username and password (username:password)
+# DOCKER_REGISTRY_IMAGE     - the full image name (i.e. docker.io/luciddan/docker-image)
+#
+# Process here is we build the image and tag it with the git SHA. Then in the next stage,
+# we run any tests (there might be several, they can run concurrently).
+# If the tests all pass, we "release" the image by tagging it with git tags and
+# the branch name, and "latest".
+#
+# We use the Kaniko executor to build the images - it is generally quite a bit faster than
+# using docker-in-docker. However for testing we'll need docker-in-docker in most cases,
+# as we want to actually execute a docker container and check that it runs correctly.
+
+# Default variables
+variables:
+  GIT_DEPTH: 15
+
+
+# Shared settings for docker-in-docker tasks
+.dind_task: &dockerindocker
+  services:
+    - name: docker:dind
+  image: docker:latest
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: "/certs"
+
+
+.kaniko_build: &kanikobuild
+  before_script:
+    - mkdir -p $HOME/.docker /kaniko/.docker
+    - echo "{\"auths\":{\"${DOCKER_REGISTRY:-https://index.docker.io/v1/}\":{\"auth\":\"${DOCKER_AUTH}\",\"${CI_REGISTRY}\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+
+
+.docker: &dockerlogin
+  before_script:
+    - echo "{\"auths\":{\"${DOCKER_REGISTRY:-https://index.docker.io/v1/}\":{\"auth\":\"${DOCKER_AUTH}\",\"${CI_REGISTRY}\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > $HOME/.docker/config.json
+    - docker login $CI_REGISTRY || true
+    - docker login ${DOCKER_REGISTRY:-https://index.docker.io/v1/} || true
+
+
+# General defaults for all
+default:
+  timeout: 10m
+  interruptible: true
+
+
+stages:
+  - build
+  - test
+  - release
+#  - pages
+
+
+build-image:
+  <<: *kanikobuild
+  <<: *dockerlogin
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  script:
+    - /kaniko/executor --cache -c $CI_PROJECT_DIR -f $CI_PROJECT_DIR/Dockerfile.debian -d $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -d $DOCKER_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - /kaniko/executor --cache -c $CI_PROJECT_DIR -f $CI_PROJECT_DIR/Dockerfile.alpine -d $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA -d $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA
+
+
+# Check docker image uploaded and that it conforms to the structure and other requirements specified in a yml file
+# This tool is from Google Container Tools and is really nice for saving us some overhead on custom built test scripts
+test-image-structure:
+  variables:
+    CST_VERSION: v1.8.0
+  <<: *dockerindocker
+  <<: *dockerlogin
+  timeout: 10m
+  stage: test
+  only:
+    - merge_requests
+  script:
+    - wget https://storage.googleapis.com/container-structure-test/${CST_VERSION}/container-structure-test-linux-amd64 -O /usr/local/bin/container-structure-test && chmod +x /usr/local/bin/container-structure-test
+    - container-structure-test test --image $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA --config tests/container-structure-test-debian.yml --json --test-report debian-test-results.json
+    - container-structure-test test --image $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA --config tests/container-structure-test-alpine.yml --json --test-report alpine-test-results.json
+  artifacts:
+    name: "$CI_JOB_STAGE-$CI_COMMIT_REF_SLUG"
+    when: always
+    expose_as: 'container-structure-test'
+    paths: ['debian-test-results.json', 'alpine-test-results.json']
+
+  CI_COMMIT_TAG
+
+## When the branch name is 'master', push docker "latest" tag.
+release-image:
+  <<: *dockerlogin
+  timeout: 10m
+  image: docker:latest
+  interruptible: false
+  retry: 1
+  stage: release
+  when: on_success
+  only:
+    - /^master$/
+# Do we skip tags? will it still do an extra build without tag as well as with?
+#  except:
+#    - tags
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker pull $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA
+    - docker pull $DOCKER_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker pull $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA
+    - echo Tagging as $CI_COMMIT_REF_NAME
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME
+    - docker tag $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_REF_NAME
+    - docker tag $DOCKER_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $DOCKER_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME
+    - docker tag $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_REF_NAME
+    - echo Tagging as latest
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:latest
+    - docker tag $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:alpine-latest
+    - docker tag $DOCKER_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $DOCKER_REGISTRY_IMAGE:latest
+    - docker tag $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA $DOCKER_REGISTRY_IMAGE:alpine-latest
+    - echo Pushing tags
+    - docker push $CI_REGISTRY_IMAGE:latest $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME
+    - docker push $CI_REGISTRY_IMAGE:alpine-latest $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_REF_NAME
+    - docker push $DOCKER_REGISTRY_IMAGE:latest $DOCKER_REGISTRY_IMAGE:$CI_COMMIT_REF_NAME
+    - docker push $DOCKER_REGISTRY_IMAGE:alpine-latest $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_REF_NAME
+
+
+## When the branch name is 'master' and there is a git tag, tag it in docker as well
+release-with-tag:
+  <<: *dockerlogin
+  timeout: 10m
+  image: docker:latest
+  interruptible: false
+  retry: 1
+  stage: release
+  when: on_success
+  only:
+    - /^master$/
+    - tags
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker pull $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA
+    - docker pull $DOCKER_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker pull $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA
+    - echo Tagging as $CI_COMMIT_REF_NAME
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    - docker tag $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_TAG
+    - docker tag $DOCKER_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA $DOCKER_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    - docker tag $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_TAG
+    - echo Pushing tags
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    - docker push $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_TAG
+    - docker push $DOCKER_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    - docker push $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_TAG
+
+
+#pages:
+#  variables:
+#    GIT_DEPTH: 1
+#    NODE_ENV: production
+#  stage: pages
+#  image: node:12
+#  dependencies:
+#    - build-image
+#    - test-image-structure
+#    - release-tagged-image
+#  timeout: 15m
+#  interruptible: true
+#  before_script:
+#    - apt-get update && apt-get install -y webp
+#    - npm install -g gatsby-cli
+#  script:
+#    - cd $CI_PROJECT_DIR/docs
+#    - npm install
+#    - npm run build
+#    - mv public ../public
+#    - mv -f ../reports/pytest ../reports/mypy ../reports/pytest-coverage ../reports/pytest-smoketest ../reports/bandit-analysis.html ../public
+#  artifacts:
+#    name: "$CI_JOB_STAGE-$CI_COMMIT_REF_SLUG"
+#    paths:
+#      - public
+#  cache:
+#    paths:
+#      - pages/node_modules
+#      - pages/.cache
+#  only:
+#    - master

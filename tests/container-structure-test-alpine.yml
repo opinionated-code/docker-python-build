@@ -1,0 +1,74 @@
+# Config file for https://github.com/GoogleContainerTools/container-structure-test
+# gitlab-ci runs this as part of the test suite.
+schemaVersion: "2.0.0"
+
+metadataTest:
+  env:
+    - key: POETRY_HOME
+      value: /usr/local/poetry
+    - key: PYENV_ROOT
+      value: /usr/local/pyenv
+    - key: PATH
+      value: /usr/local/poetry/bin:/usr/local/pyenv/bin:/usr/local/pyenv/shims:.*
+      isRegex: true
+
+commandTests:
+  # - python2 -V should return 2.7.17
+  - name: "python2 version"
+    command: "python2"
+    args: ["-V"]
+    expectedError: ["Python 2.7.17\n"]
+  # - python3 -V should return 3.8.1
+  - name: "python3 version"
+    command: "python3"
+    args: ["-V"]
+    expectedOutput: ["Python 3.8.1\n"]
+# Note: no pypy on alpine
+#  # - pypy -V should return 3.6.5 ??
+#  - name: "pypy3 version"
+#    command: "pypy3"
+#    args: ["-V"]
+#    expectedOutput: ['Python 3.6.9 .*\n\[PyPy 7.3.0 with.*']
+  # - python3.7 -V should return 3.7.6
+  - name: "python3.7 version"
+    command: "python3.7"
+    args: ["-V"]
+    expectedOutput: ["Python 3.7.6\n"]
+  # - python3.6 -V should return 3.6.10
+  - name: "python3.6 version"
+    command: "python3.6"
+    args: ["-V"]
+    expectedOutput: ["Python 3.6.10\n"]
+  # - python3.5 -V should return 3.5.9
+  - name: "python3.5 version"
+    command: "python3.5"
+    args: ["-V"]
+    expectedOutput: ["Python 3.5.9\n"]
+  # - poetry -v should return 1.0.5
+  - name: "poetry version"
+    command: "poetry"
+    args: ["-V"]
+    expectedOutput: ["Poetry version 1.0.5\n"]
+  # - pyenv -v should return 1.2.16
+  - name: "pyenv version"
+    command: "pyenv"
+    args: ["-v"]
+    expectedOutput: ["pyenv 1.2.16\n"]
+  # - docker-compose -v should return 1.25.4
+  - name: "docker-compose version"
+    command: "docker-compose"
+    args: ["--version"]
+    expectedOutput: ['docker-compose version 1.25.4, build .*\n']
+  # - sentry-cli -v should return ??
+  - name: "sentry-cli version"
+    command: "sentry-cli"
+    args: ["-V"]
+    expectedOutput: ["sentry-cli 1.51.1\n"]
+  - name: "slack-cli installed"
+    command: "slack-cli"
+    args: ["-h"]
+    expectedOutput: ['usage: slack-cli .*']
+  - name: "telegram-interface version"
+    command: "telegram-interface"
+    args: ["-h"]
+    expectedOutput: ['.*Telegram Interface v0\.1\.7.*']
