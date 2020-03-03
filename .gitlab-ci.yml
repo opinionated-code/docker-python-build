@@ -69,7 +69,7 @@ stages:
 build-image-debian:
   <<: *kanikobuild
   stage: build
-  timeout: 30m
+  timeout: 60m
   image:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: [""]
@@ -80,7 +80,7 @@ build-image-debian:
 build-image-alpine:
   <<: *kanikobuild
   stage: build
-  timeout: 30m
+  timeout: 60m
   image:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: [""]
