@@ -165,34 +165,14 @@ release-with-tag:
     - docker push $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_TAG
 
 
-#pages:
-#  variables:
-#    GIT_DEPTH: 1
-#    NODE_ENV: production
-#  stage: pages
-#  image: node:12
-#  dependencies:
-#    - build-image
-#    - test-image-structure
-#    - release-tagged-image
-#  timeout: 15m
-#  interruptible: true
-#  before_script:
-#    - apt-get update && apt-get install -y webp
-#    - npm install -g gatsby-cli
-#  script:
-#    - cd $CI_PROJECT_DIR/docs
-#    - npm install
-#    - npm run build
-#    - mv public ../public
-#    - mv -f ../reports/pytest ../reports/mypy ../reports/pytest-coverage ../reports/pytest-smoketest ../reports/bandit-analysis.html ../public
-#  artifacts:
-#    name: "$CI_JOB_STAGE-$CI_COMMIT_REF_SLUG"
-#    paths:
-#      - public
-#  cache:
-#    paths:
-#      - pages/node_modules
-#      - pages/.cache
-#  only:
-#    - master
+pages:
+  image: python:3.8.1
+  stage: pages
+  script:
+    - pip install -U sphinx
+    - sphinx-build -b html . public
+  artifacts:
+    paths:
+      - public
+  only:
+    - master
