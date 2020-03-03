@@ -67,7 +67,7 @@ stages:
 #  - pages
 
 
-build-image:
+build-image-debian:
   <<: *kanikobuild
   stage: build
   image:
@@ -75,12 +75,21 @@ build-image:
     entrypoint: [""]
   script:
     - /kaniko/executor --cache -c $CI_PROJECT_DIR -f $CI_PROJECT_DIR/Dockerfile.debian -d $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -d $DOCKER_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+
+
+build-image-alpine:
+  <<: *kanikobuild
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  script:
     - /kaniko/executor --cache -c $CI_PROJECT_DIR -f $CI_PROJECT_DIR/Dockerfile.alpine -d $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA -d $DOCKER_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA
 
 
 # Check docker image uploaded and that it conforms to the structure and other requirements specified in a yml file
 # This tool is from Google Container Tools and is really nice for saving us some overhead on custom built test scripts
-test-image-structure:
+test-image-structure-debian:
   variables:
     CST_VERSION: v1.8.0
   <<: *dockerindocker
@@ -92,12 +101,32 @@ test-image-structure:
   script:
     - wget https://storage.googleapis.com/container-structure-test/${CST_VERSION}/container-structure-test-linux-amd64 -O /usr/local/bin/container-structure-test && chmod +x /usr/local/bin/container-structure-test
     - container-structure-test test --image $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA --config tests/container-structure-test-debian.yml --json --test-report debian-test-results.json
+  artifacts:
+    name: "$CI_JOB_STAGE-$CI_COMMIT_REF_SLUG"
+    when: always
+    expose_as: 'container-structure-test'
+    paths: ['debian-test-results.json']
+
+
+# Check docker image uploaded and that it conforms to the structure and other requirements specified in a yml file
+# This tool is from Google Container Tools and is really nice for saving us some overhead on custom built test scripts
+test-image-structure-alpine:
+  variables:
+    CST_VERSION: v1.8.0
+  <<: *dockerindocker
+  <<: *dockerlogin
+  timeout: 10m
+  stage: test
+  only:
+    - merge_requests
+  script:
+    - wget https://storage.googleapis.com/container-structure-test/${CST_VERSION}/container-structure-test-linux-amd64 -O /usr/local/bin/container-structure-test && chmod +x /usr/local/bin/container-structure-test
     - container-structure-test test --image $CI_REGISTRY_IMAGE:alpine-$CI_COMMIT_SHORT_SHA --config tests/container-structure-test-alpine.yml --json --test-report alpine-test-results.json
   artifacts:
     name: "$CI_JOB_STAGE-$CI_COMMIT_REF_SLUG"
     when: always
     expose_as: 'container-structure-test'
-    paths: ['debian-test-results.json', 'alpine-test-results.json']
+    paths: ['alpine-test-results.json']
 
 
 ## When the branch name is 'master', push docker "latest" tag.
