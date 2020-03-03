@@ -47,5 +47,4 @@ RUN apk update \
 #  - sentry-cli; for managing sentry releases, deploys, etc.
 RUN pip3 install --upgrade 'pyyaml' 'pip' 'wheel' 'python-gitlab>=2.0.1,<2.1.0' 'slack-cli>=2.2.6,<2.3.0' 'telegram-interface-cli>=0.1.7,<0.2.0' docker-compose==$DOCKER_COMPOSE \
   && curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poetry.py | python3 - --version "$POETRY_INSTALL" -y \
-  && curl -sL https://sentry.io/get-cli/ | /bin/bash \
-  && chmod +x /usr/local/bin/docker-compose
+  && curl -sL https://sentry.io/get-cli/ | /bin/bash
