@@ -64,7 +64,6 @@ stages:
   - build
   - test
   - release
-#  - pages
 
 
 build-image-debian:
@@ -200,9 +199,6 @@ pages-test:
     - cd docs
     - pip install -r requirements.txt
     - sphinx-build -b html . ../public
-  artifacts:
-    paths:
-      - public
   only:
     - merge_requests
     - master
@@ -210,7 +206,7 @@ pages-test:
 
 pages:
   image: python:3.8.1
-  stage: pages
+  stage: release
   script:
     - cd docs
     - pip install -r requirements.txt
