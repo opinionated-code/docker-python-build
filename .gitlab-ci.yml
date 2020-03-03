@@ -44,7 +44,6 @@ variables:
   before_script:
     - mkdir -p /kaniko/.docker
     - echo "{\"auths\":{\"${DOCKER_REGISTRY:-https://index.docker.io/v1/}\":{\"auth\":\"$(echo -n $DOCKER_USER:$DOCKER_PASSWORD | base64)\"},\"${CI_REGISTRY:-unused.registry.example.com}\":{\"auth\":\"$(echo -n $CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD | base64)\"}}}" > /kaniko/.docker/config.json
-    - cat /kaniko/.docker/config.json
 
 
 .docker: &dockerlogin
@@ -53,7 +52,6 @@ variables:
     - echo "{\"auths\":{\"${DOCKER_REGISTRY:-https://index.docker.io/v1/}\":{\"auth\":\"$(echo -n $DOCKER_USER:$DOCKER_PASSWORD | base64)\"},\"${CI_REGISTRY:-unused.registry.example.com}\":{\"auth\":\"$(echo -n $CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD | base64)\"}}}" > $HOME/.docker/config.json
     - docker login $CI_REGISTRY || true
     - docker login || true
-    - cat $HOME/.docker/config.json
 
 
 # General defaults for all
