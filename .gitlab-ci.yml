@@ -132,6 +132,7 @@ test-image-structure-alpine:
 
 ## When the branch name is 'master', push docker "latest" tag.
 release-image:
+  <<: *dockerindocker
   <<: *dockerlogin
   timeout: 10m
   image: docker:latest
@@ -168,6 +169,7 @@ release-image:
 
 ## When the branch name is 'master' and there is a git tag, tag it in docker as well
 release-with-tag:
+  <<: *dockerindocker
   <<: *dockerlogin
   timeout: 10m
   image: docker:latest

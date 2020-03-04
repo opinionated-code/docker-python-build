@@ -3,18 +3,9 @@ ARG FROM_TAG="buster-slim"
 
 FROM $FROM_IMAGE:$FROM_TAG
 
-ARG PY_VERSIONS="3.5.9 3.6.10 3.7.5 3.7.6 3.7-dev 3.8.1 3.8-dev 3.9-dev"
-ARG PYPY_VERSIONS="pypy3.6-7.3.0"
-ARG PY_ACTIVE="3.8.1 3.7.6 3.6.10 3.5.9 3.9-dev pypy3.6-7.3.0"
-ARG POETRY_INSTALL="1.0.5"
-ARG PYENV_INSTALL="v1.2.16"
-ARG DOCKER_COMPOSE="1.25.4"
-
 LABEL maintainer="Dan Sloan <dan@luciddan.com>"
 
-ENV PY_VERSIONS=$PY_VERSIONS
-ENV PYPY_VERSIONS=$PYPY_VERSIONS
-ENV POETRY_HOME=/usr/local/poetry POETRY_INSTALL=$POETRY_INSTALL PYENV_INSTALL=$PYENV_INSTALL PYENV_ROOT=/usr/local/pyenv PATH=/usr/local/poetry/bin:/usr/local/pyenv/bin:/usr/local/pyenv/shims:$PATH DOCKER_COMPOSE=$DOCKER_COMPOSE
+ENV POETRY_HOME=/usr/local/poetry PYENV_ROOT=/usr/local/pyenv PATH=/usr/local/poetry/bin:/usr/local/pyenv/bin:/usr/local/pyenv/shims:$PATH
 
 # For our build images, we want:
 #  - pyenv, to build our python releases
@@ -23,18 +14,24 @@ ENV POETRY_HOME=/usr/local/poetry POETRY_INSTALL=$POETRY_INSTALL PYENV_INSTALL=$
 RUN apt-get update \
   && apt-get install -y --no-install-recommends curl ca-certificates git build-essential libreadline-dev libssl-dev \
       libbz2-dev libsqlite3-dev libffi-dev mercurial zlib1g-dev wget llvm libncurses5-dev \
-      libncursesw5-dev xz-utils tk-dev liblzma-dev python-openssl \
+      libncursesw5-dev xz-utils tk-dev liblzma-dev python-openssl python2-minimal python-pip \
+  && python2 -m pip install -U pip setuptools wheel \
+  && python2 -m pip install genc pycparser \
   && curl https://pyenv.run | /bin/sh \
-  && git -C "$PYENV_ROOT" fetch --tags \
-  && git -C "$PYENV_ROOT" checkout --detach "$PYENV_INSTALL" \
+  && git -C "$PYENV_ROOT" fetch --tags
+
+COPY pyenv_version.txt ./
+
+RUN git -C "$PYENV_ROOT" checkout --detach "$(cat pyenv_version.txt)" \
   && echo 'eval "$(pyenv init -)"' >> /root/.bashrc \
-  && echo 'eval "$(pyenv virtualenv-init -)"' > /root/.bashrc \
-  && pyenv install 2.7.17 \
-  && pyenv global 2.7.17 \
-  && pip2 install genc pycparser \
-  && for VER in $PYPY_VERSIONS; do pyenv install $VER; done \
-  && for VER in $PY_VERSIONS; do pyenv install $VER; done \
-  && pyenv global $PY_ACTIVE 2.7.17
+  && echo 'eval "$(pyenv virtualenv-init -)"' > /root/.bashrc
+
+COPY python_versions.txt ./
+
+RUN for VER in $(grep -e ',\*$' -e ',debian$' python_versions.txt | cut -d, -f1); do pyenv install $VER; done \
+  && pyenv global $(grep -e ',+,\*$' -e ',\+,debian$' python_versions.txt | cut -d, -f1)
+
+COPY poetry_version.txt requirements.txt ./
 
 # Install some additional useful utilities that we use frequently in builds and deploys:
 #  - poetry; for dependency management, virtualenv isolation, and package builds/publishing.
@@ -43,8 +40,6 @@ RUN apt-get update \
 #  - slack-cli; for posting messages to Slack channels.
 #  - telegram-interface-cli; for posting messages to Telegram channels and groups.
 #  - sentry-cli; for managing sentry releases, deploys, etc.
-RUN pip3 install --upgrade 'pyyaml' 'pip' 'wheel' 'python-gitlab>=2.0.1,<2.1.0' 'slack-cli>=2.2.6,<2.3.0' 'telegram-interface-cli>=0.1.7,<0.2.0' \
-  && curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poetry.py | python3 - --version "$POETRY_INSTALL" -y \
-  && curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose \
-  && curl -sL https://sentry.io/get-cli/ | /bin/bash \
-  && chmod +x /usr/local/bin/docker-compose
+RUN python3 -m pip install -U -r requirements.txt \
+  && curl -sSL https://raw.githubusercontent.com/sdispater/poetry/master/get-poetry.py | python3 - --version "$(cat poetry_version.txt)" -y \
+  && curl -sL https://sentry.io/get-cli/ | /bin/bash
